@@ -1,3 +1,12 @@
+'''
+Description: 
+Author: HCQ
+Company(School): UCAS
+Email: 1756260160@qq.com
+Date: 2021-08-25 09:32:09
+LastEditTime: 2021-08-25 15:19:29
+FilePath: /ssd-pytorch/voc_annotation.py
+'''
 #---------------------------------------------#
 #   运行前一定要修改classes
 #   如果生成的2007_train.txt里面没有目标信息
@@ -6,7 +15,7 @@
 import xml.etree.ElementTree as ET
 from os import getcwd
 
-sets=[('2007', 'train'), ('2007', 'val'), ('2007', 'test')]
+sets=[('2012', 'train'), ('2012', 'val'), ('2012', 'test')]
 #-----------------------------------------------------#
 #   这里设定的classes顺序要和model_data里的txt一样
 #-----------------------------------------------------#

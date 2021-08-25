@@ -134,7 +134,7 @@ if __name__ == "__main__":
     #------------------------------------------------------#
     #   权值文件请看README，百度网盘下载
     #------------------------------------------------------#
-    model_path = "model_data/ssd_weights.pth"
+    model_path = "model_data/ssd_weights.pth" # 载入预训练模型，加速训练过程。迁移学习的思想
     print('Loading weights into state dict...')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_dict = model.state_dict()
@@ -144,7 +144,7 @@ if __name__ == "__main__":
     model.load_state_dict(model_dict)
     print('Finished!')
 
-    annotation_path = '2007_train.txt'
+    annotation_path = '2012_train.txt' # 数据集
     #----------------------------------------------------------------------#
     #   验证集的划分在train.py代码里面进行
     #   2007_test.txt和2007_val.txt里面没有内容是正常的。训练不会使用到。
