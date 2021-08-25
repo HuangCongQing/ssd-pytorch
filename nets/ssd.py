@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from utils.config import Config
+import torch.nn.functional as F  # 使用激活函数 F.relu(v(x),
+from utils.config import Config # 配置文件
 
 from nets.mobilenetv2 import InvertedResidual, mobilenet_v2
-from nets.ssd_layers import Detect, L2Norm, PriorBox
-from nets.vgg import vgg as add_vgg # 用gg基本网络
+from nets.ssd_layers import Detect, L2Norm, PriorBox # ！！！
+from nets.vgg import vgg as add_vgg # 用Vgg基本网络
 
 # 
 class SSD(nn.Module):
@@ -14,25 +14,31 @@ class SSD(nn.Module):
         self.phase          = phase
         self.num_classes    = num_classes
         self.cfg            = Config
+        # vgg
         if backbone_name    == "vgg":
             self.vgg        = nn.ModuleList(base)
             self.L2Norm     = L2Norm(512, 20)
         else:
             self.mobilenet  = base
             self.L2Norm     = L2Norm(96, 20) #
+        # extras
         self.extras         = nn.ModuleList(extras)
+        # 先验框 priorbox
         self.priorbox       = PriorBox(backbone_name, self.cfg)
         with torch.no_grad():
             self.priors     = torch.tensor(self.priorbox.forward()).type(torch.FloatTensor)
+        # loc
         self.loc            = nn.ModuleList(head[0])
+        # conf分类
         self.conf           = nn.ModuleList(head[1])
+
         self.backbone_name  = backbone_name
-        if phase == 'test':
+        if phase == 'test': # 测试
             self.softmax    = nn.Softmax(dim=-1)
             self.detect     = Detect(num_classes, 0, 200, confidence, nms_iou)
         
-    def forward(self, x):
-        sources = list()
+    def forward(self, x): # 将VGG层，额外层，分类回归层进行连接
+        sources = list() # 
         loc     = list()
         conf    = list()
 
@@ -48,9 +54,9 @@ class SSD(nn.Module):
                 x = self.mobilenet[k](x)
         #---------------------------#
         #   conv4_3的内容
-        #   需要进行L2标准化
+        #   需要进行L2标准化  # https://blog.csdn.net/jgj123321/article/details/105854207?
         #---------------------------#
-        s = self.L2Norm(x)
+        s = self.L2Norm(x) # L2标准化  VGG16的conv4_3特征图的大小为38*38，网络层靠前，方差比较大，需要加一个L2标准化，以保证和后面的检测层差异不是很大。L2标准化的公式如下：
         sources.append(s) # 
 
         #---------------------------#
@@ -71,27 +77,29 @@ class SSD(nn.Module):
         #   shape分别为(10,10,512), (5,5,256), (3,3,256), (1,1,256)
         #-------------------------------------------------------------#      
         for k, v in enumerate(self.extras):
-            x = F.relu(v(x), inplace=True) # 激活函数
+            x = F.relu(v(x), inplace=True) # 激活函数导入
             if self.backbone_name == "vgg":
-                if k % 2 == 1: # 每隔2次添加到sorces里面
+                if k % 2 == 1: # 每隔2次把特征层添加到sources里面
                     sources.append(x)
             else:
                 sources.append(x)
 
         #-------------------------------------------------------------#
-        #   为获得的6个有效特征层添加回归预测和分类预测
+        #   为获得的6个有效特征层添加回归预测和分类预测==================================
         # （batch_size, channel,hight, width）
         #-------------------------------------------------------------#      
+        # 用 self.loc, self.conf来处理sources
         for (x, l, c) in zip(sources, self.loc, self.conf):
-            loc.append(l(x).permute(0, 2, 3, 1).contiguous())
-            conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+            # 添加l(x)和c(x)
+            loc.append(l(x).permute(0, 2, 3, 1).contiguous()) # permute主要对通道数进行翻转，因为pytorch中channel在第1维(（batch_size, channel,hight, width）)
+            conf.append(c(x).permute(0, 2, 3, 1).contiguous()) # 把第1维，放在最后1维
             # 回归处理和分类处理的将诶国保存在loc 和conf=====================================================================
 
         #-------------------------------------------------------------#
         #   进行reshape方便堆叠
         #-------------------------------------------------------------#  
-        loc     = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
-        conf    = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
+        loc     = torch.cat([o.view(o.size(0), -1) for o in loc], 1) # torch.Size([32, 34928])
+        conf    = torch.cat([o.view(o.size(0), -1) for o in conf], 1) # torch.Size([32, 183372])
         #-------------------------------------------------------------#
         #   loc会reshape到batch_size,num_anchors,4
         #   conf会reshap到batch_size,num_anchors,self.num_classes
@@ -102,17 +110,19 @@ class SSD(nn.Module):
             #   loc会reshape到batch_size,num_anchors,4
             #   conf会reshap到batch_size,num_anchors,self.num_classes
             output = self.detect(
-                loc.view(loc.size(0), -1, 4),  # 调整shape  # loc preds
+                loc.view(loc.size(0), -1, 4),   # loc preds   调整shape  # loc preds
+                # 第一个维度loc.size(0)：batch_size ,第二个维度：所有先验框，第三个维度4：先验框的调整参数
                 self.softmax(conf.view(conf.size(0), -1, self.num_classes)), # conf.size(0)是batch_size  # conf preds
+                #第一个维度loc.size(0)：batch_size ,第二个维度：所有先验框，第三个维度num_classes： 所有先验框是否包含物体，以及物体种类
                 self.priors              
             )
-        else:
+        else: # 不用于预测的话，不用softmax！！！直接返回网络的回归预测结果和分类预测结果用于训练
             output = (
-                loc.view(loc.size(0), -1, 4),
-                conf.view(conf.size(0), -1, self.num_classes),
-                self.priors
+                loc.view(loc.size(0), -1, 4),  # torch.Size([32, 8732, 4]) 第一个维度loc.size(0)：batch_size ,第二个维度：所有先验框，第三个维度4：先验框的调整参数  # loc preds==================================
+                conf.view(conf.size(0), -1, self.num_classes), # torch.Size([32, 8732, 21]) #第一个维度loc.size(0)：batch_size ,第二个维度：所有先验框，第三个维度num_classes： 所有先验框是否包含物体，以及物体种类  conf preds================================
+                self.priors # torch.Size([8732, 4])
             )
-        return output
+        return output # 返回输出
 
 # VGG网络相比普通的VGG网络有一定的修改  https://www.yuque.com/huangzhongqing/2d-object-detection/ut6pu8#ECS0c
 def add_extras(i, backbone_name):
@@ -146,7 +156,7 @@ def add_extras(i, backbone_name):
         layers += [InvertedResidual(256, 64, stride=2, expand_ratio=0.25)]
         
     return layers
-# 2、！！！从特征获取f分类预测和回归预测结果   有效特征层(一共6个)===============================
+# 2、！！！从特征获取f分类预测和回归预测结果   有效特征层(一共6个)，最后调用class SSD(nn.Module):===============================
 def get_ssd(phase, num_classes, backbone_name, confidence=0.5, nms_iou=0.45):
     #---------------------------------------------------#
     #   add_vgg指的是加入vgg主干特征提取网络。
