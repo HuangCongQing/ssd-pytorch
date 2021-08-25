@@ -110,31 +110,31 @@ class SSD(nn.Module):
                 self.priors
             )
         return output
-
+# VGG网络相比普通的VGG网络有一定的修改  https://www.yuque.com/huangzhongqing/2d-object-detection/ut6pu8#ECS0c
 def add_extras(i, backbone_name):
     layers = []
     in_channels = i
     
     if backbone_name=='vgg':
         # Block 6
-        # 19,19,1024 -> 10,10,512
+        # 19,19,1024 -> 10,10,512  (第3次回归预测和分类预测)
         layers += [nn.Conv2d(in_channels, 256, kernel_size=1, stride=1)]
-        layers += [nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)]
+        layers += [nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)] # stride=2  Channel 512
 
         # Block 7
-        # 10,10,512 -> 5,5,256
+        # 10,10,512 -> 5,5,256  (第4次回归预测和分类预测)
         layers += [nn.Conv2d(512, 128, kernel_size=1, stride=1)]
         layers += [nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)]
 
         # Block 8
-        # 5,5,256 -> 3,3,256
+        # 5,5,256 -> 3,3,256   (第5次回归预测和分类预测)
         layers += [nn.Conv2d(256, 128, kernel_size=1, stride=1)]
         layers += [nn.Conv2d(128, 256, kernel_size=3, stride=1)]
         
         # Block 9
-        # 3,3,256 -> 1,1,256
-        layers += [nn.Conv2d(256, 128, kernel_size=1, stride=1)]
-        layers += [nn.Conv2d(128, 256, kernel_size=3, stride=1)]
+        # 3,3,256 -> 1,1,256   (第6次回归预测和分类预测)
+        layers += [nn.Conv2d(256, 128, kernel_size=1, stride=1)] # 1x1卷积压缩通道数量为128
+        layers += [nn.Conv2d(128, 256, kernel_size=3, stride=1)] # 3✖3卷积 
     else:
         layers += [InvertedResidual(in_channels, 512, stride=2, expand_ratio=0.2)]
         layers += [InvertedResidual(512, 256, stride=2, expand_ratio=0.25)]
