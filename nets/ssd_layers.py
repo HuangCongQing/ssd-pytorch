@@ -9,7 +9,7 @@ from torch.autograd import Function
 from utils.box_utils import decode, nms
 from utils.config import Config
 
-
+# “test”阶段才有如果用于预测的话，会添加上detect用于对先验框解码，获得预测结果
 class Detect(Function):
     def __init__(self, num_classes, bkg_label, top_k, conf_thresh, nms_thresh):
         self.num_classes = num_classes
@@ -21,7 +21,7 @@ class Detect(Function):
         self.conf_thresh = conf_thresh
         self.variance = Config['variance']
 
-    def forward(self, loc_data, conf_data, prior_data):
+    def forward(self, loc_data, conf_data, prior_data): # 输入：回归预测结果，分类预测结果，先验框8732
         #--------------------------------#
         #   先转换成cpu下运行
         #--------------------------------#
@@ -32,7 +32,8 @@ class Detect(Function):
         #   num的值为batch_size
         #   num_priors为先验框的数量
         #--------------------------------#
-        num = loc_data.size(0) 
+        num = loc_data.size(0)  # batch_size 传入多少张图片进行预测
+        # 先验框8732
         num_priors = prior_data.size(0)
 
         output = torch.zeros(num, self.num_classes, self.top_k, 5)
@@ -40,44 +41,44 @@ class Detect(Function):
         #   对分类预测结果进行reshape
         #   num, num_classes, num_priors
         #--------------------------------------#
-        conf_preds = conf_data.view(num, num_priors, self.num_classes).transpose(2, 1)
+        conf_preds = conf_data.view(num, num_priors, self.num_classes).transpose(2, 1) # 分类  # .transpose(2, 1) 把第一个维度和第二个维度翻转，方便后面处理
 
         # 对每一张图片进行处理正常预测的时候只有一张图片，所以只会循环一次
         for i in range(num):
             #--------------------------------------#
-            #   对先验框解码获得预测框
+            #   对先验框解码获得预测框 通过decode函数
             #   解码后，获得的结果的shape为
             #   num_priors, 4
             #--------------------------------------#
-            decoded_boxes = decode(loc_data[i], prior_data, self.variance)
-            conf_scores = conf_preds[i].clone()
+            decoded_boxes = decode(loc_data[i], prior_data, self.variance) # 输入为回归预测结果和先验框  函数located  at utils/box_utils.py
+            conf_scores = conf_preds[i].clone() # (21, 8732)
 
             #--------------------------------------#
-            #   获得每一个类对应的分类结果
+            #   获得每一个类对应的分类结果 # 对21类进行循环
             #   num_priors,
             #--------------------------------------#
-            for cl in range(1, self.num_classes):
+            for cl in range(1, self.num_classes): # 对21类进行循环
                 #--------------------------------------#
                 #   首先利用门限进行判断
                 #   然后取出满足门限的得分
                 #--------------------------------------#
-                c_mask = conf_scores[cl].gt(self.conf_thresh)
+                c_mask = conf_scores[cl].gt(self.conf_thresh) #(8732, ) ()函数（大于0.5为True。小于0.5为False）
                 scores = conf_scores[cl][c_mask]
-                if scores.size(0) == 0:
+                if scores.size(0) == 0: # c_mask全为false
                     continue
-                l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
+                l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes) # 
                 #--------------------------------------#
                 #   将满足门限的预测框取出来
                 #--------------------------------------#
-                boxes = decoded_boxes[l_mask].view(-1, 4)
+                boxes = decoded_boxes[l_mask].view(-1, 4) # (16, 4)
                 #--------------------------------------#
-                #   利用这些预测框进行非极大抑制
+                #   利用这些预测框进行非极大抑制nms==============================================
                 #--------------------------------------#
-                ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
-                output[i, cl, :count] = torch.cat((scores[ids[:count]].unsqueeze(1), boxes[ids[:count]]), 1)
+                ids, count = nms(boxes, scores, self.nms_thresh, self.top_k) # 排序top_k      ids:tensor([4, 0, 0, 0, 0, 0, 0, 0, 0, 0])  count :1
+                output[i, cl, :count] = torch.cat((scores[ids[:count]].unsqueeze(1), boxes[ids[:count]]), 1) # 
                 
         return output
-
+# 先验框=====================================
 class PriorBox(object):
     def __init__(self, backbone_name, cfg):
         super(PriorBox, self).__init__()

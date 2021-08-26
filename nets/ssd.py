@@ -23,7 +23,7 @@ class SSD(nn.Module):
             self.L2Norm     = L2Norm(96, 20) #
         # extras
         self.extras         = nn.ModuleList(extras)
-        # 先验框 priorbox
+        # 先验框 priorbox 啊啊啊==============================
         self.priorbox       = PriorBox(backbone_name, self.cfg)
         with torch.no_grad():
             self.priors     = torch.tensor(self.priorbox.forward()).type(torch.FloatTensor)
@@ -96,7 +96,7 @@ class SSD(nn.Module):
             # 回归处理和分类处理的将诶国保存在loc 和conf=====================================================================
 
         #-------------------------------------------------------------#
-        #   进行reshape方便堆叠
+        #   进行resize  reshape方便堆叠
         #-------------------------------------------------------------#  
         loc     = torch.cat([o.view(o.size(0), -1) for o in loc], 1) # torch.Size([32, 34928])
         conf    = torch.cat([o.view(o.size(0), -1) for o in conf], 1) # torch.Size([32, 183372])
@@ -109,7 +109,7 @@ class SSD(nn.Module):
         if self.phase == "test":
             #   loc会reshape到batch_size,num_anchors,4
             #   conf会reshap到batch_size,num_anchors,self.num_classes
-            output = self.detect(
+            output = self.detect( # 如果用于预测的话，会添加上detect用于对先验框解码，获得预测结果
                 loc.view(loc.size(0), -1, 4),   # loc preds   调整shape  # loc preds
                 # 第一个维度loc.size(0)：batch_size ,第二个维度：所有先验框，第三个维度4：先验框的调整参数
                 self.softmax(conf.view(conf.size(0), -1, self.num_classes)), # conf.size(0)是batch_size  # conf preds

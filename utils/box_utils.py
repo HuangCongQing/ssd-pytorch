@@ -123,15 +123,16 @@ def encode(matched, priors, variances):
 
 #-------------------------------------------------------------------#
 #   Adapted from https://github.com/Hakuyume/chainer-ssd
-#   利用预测结果对先验框进行调整，前两个参数用于调整中心的xy轴坐标
-#   后两个参数用于调整先验框宽高
+#   利用预测结果对先验框进行调整，
+# * 前两个参数用于调整中心的xy轴坐标
+#  * 后两个参数用于调整先验框宽高
 #-------------------------------------------------------------------#
-def decode(loc, priors, variances):
+def decode(loc, priors, variances): # 输入为回归预测结果和先验框
     boxes = torch.cat((
-        priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
-        priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), 1)
-    boxes[:, :2] -= boxes[:, 2:] / 2
-    boxes[:, 2:] += boxes[:, :2]
+        priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:], # 中心的xy轴坐标   variances[0] :0.1
+        priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), 1) # 先验框宽高  variances[1] :0.2
+    boxes[:, :2] -= boxes[:, 2:] / 2 # 计算先验框的左上角????
+    boxes[:, 2:] += boxes[:, :2] # 先验框的右下角????
     return boxes
 
 

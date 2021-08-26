@@ -19,7 +19,7 @@ if __name__ == "__main__":
     #   'video'表示视频检测
     #   'fps'表示测试fps
     #-------------------------------------------------------------------------#
-    mode = "predict"
+    mode = "predict" #  video'  'fps'
     #-------------------------------------------------------------------------#
     #   video_path用于指定视频的路径，当video_path=0时表示检测摄像头
     #   video_save_path表示视频保存的路径，当video_save_path=""时表示不保存
@@ -43,7 +43,8 @@ if __name__ == "__main__":
         比如判断if predicted_class == 'car': 即可判断当前目标是否为车，然后记录数量即可。利用draw.text即可写字。
         '''
         while True:
-            img = input('Input image filename:')
+            # img = input('Input image filename:')
+            img = "img/street.jpg"
             try:
                 image = Image.open(img)
             except:
