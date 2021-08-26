@@ -7,7 +7,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from nets.ssd import get_ssd
+from nets.ssd import get_ssd # 模型
 from nets.ssd_training import LossHistory, MultiBoxLoss, weights_init
 from utils.config import Config
 from utils.dataloader import SSDDataset, ssd_dataset_collate
@@ -114,7 +114,7 @@ def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch
 #----------------------------------------------------#
 #   检测精度mAP和pr曲线计算参考视频
 #   https://www.bilibili.com/video/BV1zE411u7Vw
-#----------------------------------------------------#
+#----------------------------------------------------#主函数===================================================================================
 if __name__ == "__main__":
     #-------------------------------#
     #   是否使用Cuda
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     #   vgg或者mobilenet
     #---------------------------------------------#
     backbone = "vgg"
-
+    # 获得模型=============================================================================
     model = get_ssd("train", Config["num_classes"], backbone)
     weights_init(model)
     #------------------------------------------------------#
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     model_path = "model_data/ssd_weights.pth" # 载入预训练模型，加速训练过程。迁移学习的思想
     print('Loading weights into state dict...')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model_dict = model.state_dict()
+    model_dict = model.state_dict() # 一共71层（包含vgg，extras, Ioc, Conf)
     pretrained_dict = torch.load(model_path, map_location=device)
     pretrained_dict = {k: v for k, v in pretrained_dict.items() if np.shape(model_dict[k]) ==  np.shape(v)}
     model_dict.update(pretrained_dict)
@@ -177,6 +177,7 @@ if __name__ == "__main__":
     #   提示OOM或者显存不足请调小Batch_size
     #------------------------------------------------------#
     if True:
+        # 初始化参数
         lr              = 5e-4
         Batch_size      = 32
         Init_Epoch      = 0

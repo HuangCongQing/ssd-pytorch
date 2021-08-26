@@ -51,7 +51,7 @@ if __name__ == "__main__":
                 print('Open Error! Try again!')
                 continue
             else:
-                r_image = ssd.detect_image(image)
+                r_image = ssd.detect_image(image) # 检测图像，返回预测图像==============================================
                 r_image.show()
 
     elif mode == "video":

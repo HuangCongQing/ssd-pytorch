@@ -103,7 +103,6 @@ class SSD(object):
     def detect_image(self, image):
         #---------------------------------------------------------#
         #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
-        #---------------------------------------------------------#
         image = image.convert('RGB')
 
         image_shape = np.array(np.shape(image)[0:2])
@@ -136,30 +135,33 @@ class SSD(object):
             top_bboxes = []
             #---------------------------------------------------#
             #   preds的shape为 1, num_classes, top_k, 5
-            for i in range(preds.size(1)):
+            for i in range(preds.size(1)): # 遍历21类
                 j = 0
-                while preds[0, i, j, 0] >= self.confidence: # 0.5置信度筛选
+                # 遍历当前类的各个score和bbox
+                while preds[0, i, j, 0] >= self.confidence: # > 0.5置信度筛选=====================================
                     #---------------------------------------------------#
                     #   score为当前预测框的得分
                     #   label_name为预测框的种类
                     score = preds[0, i, j, 0]
-                    label_name = self.class_names[i-1]
+                    label_name = self.class_names[i-1] # label名字
                     #---------------------------------------------------#
                     #   pt的shape为4, 当前预测框的左上角右下角
                     pt = (preds[0, i, j, 1:]).detach().numpy()
                     coords = [pt[0], pt[1], pt[2], pt[3]]
+                    # append添加 保存到三个数组 top_conf（score），top_label(label), top_bboxes
                     top_conf.append(score) # 置信度最高score
-                    top_label.append(label_name)
-                    top_bboxes.append(coords)
+                    top_label.append(label_name) # label
+                    top_bboxes.append(coords) # bboxes
                     j = j + 1
 
         # 如果不存在满足门限的预测框，直接返回原图
         if len(top_conf)<=0: # {list: 6} 置信度最高的score
             return image
-        # 下列结果
+        # 下列结果top_conf（score），top_label(label), top_bboxes
         top_conf = np.array(top_conf)
         top_label = np.array(top_label)
         top_bboxes = np.array(top_bboxes)
+        # 处理top_bboxes
         top_xmin, top_ymin, top_xmax, top_ymax = np.expand_dims(top_bboxes[:,0], -1),np.expand_dims(top_bboxes[:,1], -1),np.expand_dims(top_bboxes[:,2], -1),np.expand_dims(top_bboxes[:,3], -1)
 
         #-----------------------------------------------------------#
@@ -172,6 +174,7 @@ class SSD(object):
             top_xmax = top_xmax * image_shape[1]
             top_ymax = top_ymax * image_shape[0]
             boxes = np.concatenate([top_ymin,top_xmin,top_ymax,top_xmax], axis=-1)
+            
         # 绘图代码=======================================================================================
         font = ImageFont.truetype(font='model_data/simhei.ttf',size=np.floor(3e-2 * np.shape(image)[1] + 0.5).astype('int32'))
 
