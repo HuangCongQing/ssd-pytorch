@@ -4,7 +4,7 @@ Author: HCQ
 Company(School): UCAS
 Email: 1756260160@qq.com
 Date: 2021-08-25 09:32:09
-LastEditTime: 2021-08-25 15:16:50
+LastEditTime: 2021-08-25 20:58:51
 FilePath: /ssd-pytorch/utils/config.py
 '''
 Config = {
@@ -23,7 +23,7 @@ Config = {
     #   当min_dim = 300时，'feature_maps': [38, 19, 10, 5, 3, 1]
     #-----------------------------------------------------------------#
     'min_dim': 300,
-    'feature_maps': {
+    'feature_maps': {  # 有效特征层的大小========
         'vgg'       : [38, 19, 10, 5, 3, 1],
         'mobilenet' : [19, 10, 5, 3, 2, 1],
     },
