@@ -12,7 +12,7 @@ from PIL import Image
 from ssd import SSD
 
 if __name__ == "__main__":
-    ssd = SSD()
+    ssd = SSD() # 类
     #-------------------------------------------------------------------------#
     #   mode用于指定测试的模式：
     #   'predict'表示单张图片预测

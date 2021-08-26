@@ -35,7 +35,7 @@ class SSD(nn.Module):
         self.backbone_name  = backbone_name
         if phase == 'test': # 测试
             self.softmax    = nn.Softmax(dim=-1)
-            self.detect     = Detect(num_classes, 0, 200, confidence, nms_iou)
+            self.detect     = Detect(num_classes, 0, 200, confidence, nms_iou) # detect层加入到了网络之中
         
     def forward(self, x): # 将VGG层，额外层，分类回归层进行连接
         sources = list() # 
