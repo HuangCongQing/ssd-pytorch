@@ -7,10 +7,10 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from nets.ssd import get_ssd # 模型
-from nets.ssd_training import LossHistory, MultiBoxLoss, weights_init
-from utils.config import Config
-from utils.dataloader import SSDDataset, ssd_dataset_collate
+from nets.ssd import get_ssd # 模型==========
+from nets.ssd_training import LossHistory, MultiBoxLoss, weights_init # 计算loss
+from utils.config import Config # 配置文件
+from utils.dataloader import SSDDataset, ssd_dataset_collate # 数据
 
 warnings.filterwarnings("ignore")
 
@@ -25,6 +25,7 @@ def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
+# 单个epoch训练（loss计算）
 def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch,cuda):
     loc_loss        = 0
     conf_loss       = 0
@@ -37,7 +38,8 @@ def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch
         for iteration, batch in enumerate(gen):
             if iteration >= epoch_size:
                 break
-            images, targets = batch[0], batch[1]
+            images, targets = batch[0], batch[1] # 得到图像和label
+            # images(32, 3,300,300) targets: list:32*(4BB+1label)
             with torch.no_grad():
                 if cuda:
                     images  = torch.from_numpy(images).type(torch.FloatTensor).cuda()
@@ -45,22 +47,14 @@ def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch
                 else:
                     images  = torch.from_numpy(images).type(torch.FloatTensor)
                     targets = [torch.from_numpy(ann).type(torch.FloatTensor) for ann in targets]
-            #----------------------#
             #   前向传播
-            #----------------------#
-            out = net(images)
-            #----------------------#
+            out = net(images) # 模型
             #   清零梯度
-            #----------------------#
             optimizer.zero_grad()
-            #----------------------#
-            #   计算损失
-            #----------------------#
+            #   计算损失=============================================================
             loss_l, loss_c  = criterion(out, targets)
             loss            = loss_l + loss_c
-            #----------------------#
             #   反向传播
-            #----------------------#
             loss.backward()
             optimizer.step()
 
@@ -89,7 +83,7 @@ def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch
 
                 out = net(images)
                 optimizer.zero_grad()
-                loss_l, loss_c = criterion(out, targets)
+                loss_l, loss_c = criterion(out, targets) # 计算loss
 
                 loc_loss_val    += loss_l.item()
                 conf_loss_val   += loss_c.item()
@@ -99,7 +93,7 @@ def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch
                                     'lr'        : get_lr(optimizer)})
                 pbar.update(1)
 
-    total_loss  = loc_loss + conf_loss
+    total_loss  = loc_loss + conf_loss # loss计算
     val_loss    = loc_loss_val + conf_loss_val
 
     loss_history.append_loss(total_loss/(epoch_size+1), val_loss/(epoch_size_val+1))
@@ -107,7 +101,7 @@ def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch
     print('Epoch:'+ str(epoch+1) + '/' + str(Epoch))
     print('Total Loss: %.4f || Val Loss: %.4f ' % (total_loss/(epoch_size+1),val_loss/(epoch_size_val+1)))
     print('Saving state, iter:', str(epoch+1))
-
+    # 每个epoch保存一次权重
     torch.save(model.state_dict(), 'logs/Epoch%d-Total_Loss%.4f-Val_Loss%.4f.pth'%((epoch+1),total_loss/(epoch_size+1),val_loss/(epoch_size_val+1)))
     return val_loss/(epoch_size_val+1)
 
@@ -118,8 +112,6 @@ def fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,genval,Epoch
 if __name__ == "__main__":
     #-------------------------------#
     #   是否使用Cuda
-    #   没有GPU可以设置成False
-    #-------------------------------#
     Cuda = True
     #--------------------------------------------#
     #   与视频中不同、新添加了主干网络的选择
@@ -127,9 +119,9 @@ if __name__ == "__main__":
     #   可通过修改backbone变量进行主干网络的选择
     #   vgg或者mobilenet
     #---------------------------------------------#
-    backbone = "vgg"
+    backbone = "vgg" # 参数
     # 获得模型=============================================================================
-    model = get_ssd("train", Config["num_classes"], backbone)
+    model = get_ssd("train", Config["num_classes"], backbone)  # 参数
     weights_init(model)
     #------------------------------------------------------#
     #   权值文件请看README，百度网盘下载
@@ -153,16 +145,17 @@ if __name__ == "__main__":
     val_split = 0.1
     with open(annotation_path) as f:
         lines = f.readlines()
-    np.random.seed(10101)
-    np.random.shuffle(lines)
+    np.random.seed(10101) # 随机种子
+    np.random.shuffle(lines) # 数据集打乱
     np.random.seed(None)
     num_val = int(len(lines)*val_split)
     num_train = len(lines) - num_val
     
+    # 损失函数
     criterion = MultiBoxLoss(Config['num_classes'], 0.5, True, 0, True, 3, 0.5, False, Cuda)
     loss_history = LossHistory("logs/")
 
-    net = model.train()
+    net = model.train() # 模型训练============================================================================================
     if Cuda:
         net = torch.nn.DataParallel(model)
         cudnn.benchmark = True
@@ -185,14 +178,15 @@ if __name__ == "__main__":
 
         optimizer       = optim.Adam(net.parameters(), lr=lr)
         lr_scheduler    = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
-
+        # 数据处理SSDDataset
         train_dataset   = SSDDataset(lines[:num_train], (Config["min_dim"], Config["min_dim"]), True)
         val_dataset     = SSDDataset(lines[num_train:], (Config["min_dim"], Config["min_dim"]), False)
-
+        # 对txt文件每一行读取，进行预处理
+        # gen = （image ，label）
         gen             = DataLoader(train_dataset, shuffle=True, batch_size=Batch_size, num_workers=4, pin_memory=True,
-                                drop_last=True, collate_fn=ssd_dataset_collate)
+                                drop_last=True, collate_fn=ssd_dataset_collate) #  return images, bboxes
         gen_val         = DataLoader(val_dataset, shuffle=True, batch_size=Batch_size, num_workers=4, pin_memory=True,
-                                drop_last=True, collate_fn=ssd_dataset_collate)
+                                drop_last=True, collate_fn=ssd_dataset_collate) #  return images, bboxes
 
         if backbone == "vgg":
             for param in model.vgg.parameters():
@@ -201,7 +195,7 @@ if __name__ == "__main__":
             for param in model.mobilenet.parameters():
                 param.requires_grad = False
 
-        epoch_size      = num_train // Batch_size
+        epoch_size      = num_train // Batch_size # 确定epoch次数
         epoch_size_val  = num_val // Batch_size
 
         if epoch_size == 0 or epoch_size_val == 0:
@@ -217,16 +211,16 @@ if __name__ == "__main__":
         Freeze_Epoch    = 50
         Unfreeze_Epoch  = 100
 
-        optimizer       = optim.Adam(net.parameters(), lr=lr)
+        optimizer       = optim.Adam(net.parameters(), lr=lr) # 优化器
         lr_scheduler    = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
         train_dataset   = SSDDataset(lines[:num_train], (Config["min_dim"], Config["min_dim"]), True)
         val_dataset     = SSDDataset(lines[num_train:], (Config["min_dim"], Config["min_dim"]), False)
         
         gen             = DataLoader(train_dataset, shuffle=True, batch_size=Batch_size, num_workers=4, pin_memory=True,
-                                drop_last=True, collate_fn=ssd_dataset_collate)
+                                drop_last=True, collate_fn=ssd_dataset_collate) #  return images, bboxes
         gen_val         = DataLoader(val_dataset, shuffle=True, batch_size=Batch_size, num_workers=4, pin_memory=True,
-                                drop_last=True, collate_fn=ssd_dataset_collate)
+                                drop_last=True, collate_fn=ssd_dataset_collate) #  return images, bboxes
 
         if backbone == "vgg":
             for param in model.vgg.parameters():
@@ -240,7 +234,7 @@ if __name__ == "__main__":
 
         if epoch_size == 0 or epoch_size_val == 0:
             raise ValueError("数据集过小，无法进行训练，请扩充数据集。")
-            
-        for epoch in range(Freeze_Epoch,Unfreeze_Epoch):
+        # 开始训练===============================================================================
+        for epoch in range(Freeze_Epoch,Unfreeze_Epoch):# (50， 100)
             val_loss = fit_one_epoch(net,criterion,epoch,epoch_size,epoch_size_val,gen,gen_val,Unfreeze_Epoch,Cuda)
             lr_scheduler.step(val_loss)

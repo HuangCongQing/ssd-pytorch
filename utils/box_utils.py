@@ -36,83 +36,72 @@ def intersect(box_a, box_b):
     #-------------------------------------#
     return inter[:, :, 0] * inter[:, :, 1]
 
-
+# 计算IoU的过程
 def jaccard(box_a, box_b):
-    #-------------------------------------#
     #   返回的inter的shape为[A,B]
     #   代表每一个真实框和先验框的交矩形
-    #-------------------------------------#
     inter = intersect(box_a, box_b)
-    #-------------------------------------#
     #   计算先验框和真实框各自的面积
-    #-------------------------------------#
     area_a = ((box_a[:, 2]-box_a[:, 0]) *
               (box_a[:, 3]-box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
     area_b = ((box_b[:, 2]-box_b[:, 0]) *
               (box_b[:, 3]-box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
 
     union = area_a + area_b - inter
-    #-------------------------------------#
     #   每一个真实框和先验框的交并比[A,B]
-    #-------------------------------------#
     return inter / union
 
 
 def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     #----------------------------------------------#
-    #   计算所有的先验框和真实框的重合程度
-    #----------------------------------------------#
+    #   计算所有的先验框和真实框的重合程度（一个对应矩阵：每一行代表真实框，每一列代表先验框）
     overlaps = jaccard(
-        truths,
-        point_form(priors)
+        truths, # (1, 4)  [0.3133, 0.2833, 0.7067, 0.8567]]
+        point_form(priors) # (8732, 4)
     )
     #----------------------------------------------#
-    #   所有真实框和先验框的最好重合程度
+    #   所有真实框和先验框的最好重合程度（数量是GT 数量，举例2个GT）
     #   best_prior_overlap [truth_box,1]
     #   best_prior_idx [truth_box,0]
-    #----------------------------------------------#
     best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
-    best_prior_idx.squeeze_(1)
-    best_prior_overlap.squeeze_(1)
+    best_prior_idx.squeeze_(1) # 下标  [3155, 3603]
+    best_prior_overlap.squeeze_(1) #overlap重合度最高 [0.4911, 0.6360]
+
     #----------------------------------------------#
-    #   所有先验框和真实框的最好重合程度
+    #   所有先验框和真实框的最好重合程度（数量是8732个）
     #   best_truth_overlap [1,prior]
     #   best_truth_idx [1,prior]
-    #----------------------------------------------#
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
-    best_truth_idx.squeeze_(0)
-    best_truth_overlap.squeeze_(0)
+    best_truth_idx.squeeze_(0) # （8732， ）
+    best_truth_overlap.squeeze_(0) # （8732， ）
 
     #----------------------------------------------#
     #   用于保证每个真实框都至少有对应的一个先验框
-    #----------------------------------------------#
     for j in range(best_prior_idx.size(0)):
         best_truth_idx[best_prior_idx[j]] = j
     best_truth_overlap.index_fill_(0, best_prior_idx, 2)
     
     #----------------------------------------------#
-    #   获取每一个先验框对应的真实框[num_priors,4]
-    #----------------------------------------------#
-    matches = truths[best_truth_idx]
+    #   获取每一个先验框对应的真实框[num_priors,4]==============================
+    matches = truths[best_truth_idx] # (8732, 4)  # 这里8732行，每行的框都是[0.3133, 0.2833, 0.7067, 0.8567]]
     # Shape: [num_priors]
     conf = labels[best_truth_idx] + 1
 
     #----------------------------------------------#
     #   如果重合程度小于threhold则认为是背景
-    #----------------------------------------------#
-    conf[best_truth_overlap < threshold] = 0
+    conf[best_truth_overlap < threshold] = 0 # threshold=0.5
     
     #----------------------------------------------#
-    #   利用真实框和先验框进行编码
+    #   利用真实框和先验框进行编码 ========================================================================================
     #   编码后的结果就是网络应该有的预测结果
-    #----------------------------------------------#
-    loc = encode(matches, priors, variances)
+    loc = encode(matches, priors, variances) # 
 
     # [num_priors,4]
-    loc_t[idx] = loc    
+    loc_t[idx] = loc     #(8732, 4) 得到对应图片(idx)结果=======================
     # [num_priors]
-    conf_t[idx] = conf  
+    conf_t[idx] = conf   # (8732)  就是label值，里面好几个数值都是15。其他都是0=======================
 
+# 编码操作：真实框-->预测结果)
 def encode(matched, priors, variances):
     g_cxcy = (matched[:, :2] + matched[:, 2:])/2 - priors[:, :2]
     g_cxcy /= (variances[0] * priors[:, 2:])
@@ -135,7 +124,7 @@ def decode(loc, priors, variances): # 输入为回归预测结果和先验框
     boxes[:, 2:] += boxes[:, :2] # 先验框的右下角????
     return boxes
 
-
+# 
 def log_sum_exp(x):
     x_max = x.data.max()
     return torch.log(torch.sum(torch.exp(x-x_max), 1, keepdim=True)) + x_max

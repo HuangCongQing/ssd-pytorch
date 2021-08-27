@@ -28,82 +28,73 @@ class MultiBoxLoss(nn.Module):
 
     def forward(self, predictions, targets):
         #--------------------------------------------------#
-        #   取出预测结果的三个值：回归信息，置信度，先验框
-        #--------------------------------------------------#
+        #   取出预测结果的三个值：回归信息，分类信息-置信度，先验框
         loc_data, conf_data, priors = predictions
-        #--------------------------------------------------#
         #   计算出batch_size和先验框的数量
+        num = loc_data.size(0) # batch_size =32就是图片的数量
+        num_priors = (priors.size(0)) # 8732
         #--------------------------------------------------#
-        num = loc_data.size(0)
-        num_priors = (priors.size(0))
-        #--------------------------------------------------#
-        #   创建一个tensor进行处理
-        #--------------------------------------------------#
-        loc_t = torch.zeros(num, num_priors, 4).type(torch.FloatTensor)
-        conf_t = torch.zeros(num, num_priors).long()
+        #   创建一个tensor， 存放match的结果=============================================================
+        loc_t = torch.zeros(num, num_priors, 4).type(torch.FloatTensor) # （32, 8732, 4）
+        conf_t = torch.zeros(num, num_priors).long()# （32, 8732）
 
         if self.use_gpu:
-            loc_t = loc_t.cuda()
-            conf_t = conf_t.cuda()
-            priors = priors.cuda()
-
-        for idx in range(num):
-            # 获得真实框与标签
-            truths = targets[idx][:, :-1]
-            labels = targets[idx][:, -1]
-
+            loc_t = loc_t.cuda()# （32, 8732, 4）
+            conf_t = conf_t.cuda()# （32, 8732, 21）
+            priors = priors.cuda() # (8732, 4)
+        # 根据GT得到比较合适的先验框，得到 loc_t, conf_t（没用到预测结果）
+        for idx in range(num): # batch_size 32就是图片的数量
+            # 1 获得真实框与标签
+            truths = targets[idx][:, :-1] # (1,4)   tensor([[0.3133, 0.2833, 0.7067, 0.8567]])
+            # 2 获得标签
+            labels = targets[idx][:, -1]  # ()
             if(len(truths)==0):
                 continue
-
-            # 获得先验框
+            # 3 获得先验框
             defaults = priors
-            #--------------------------------------------------#
+            # 4  找到标签对应的先验框========================================================================================
             #   利用真实框和先验框进行匹配。
             #   如果真实框和先验框的重合度较高，则认为匹配上了。
             #   该先验框用于负责检测出该真实框。
-            #--------------------------------------------------#
-            match(self.threshold, truths, defaults, self.variance, labels, loc_t, conf_t, idx)
+            match(self.threshold, truths, defaults, self.variance, labels, loc_t, conf_t, idx) # 在for循环中，对每个图像进行匹配==================================================
+            # 得到真实的 loc_t, conf_t
 
-        # 所有conf_t>0的地方，代表内部包含物体
-        pos = conf_t > 0
+        # 所有conf_t>0的地方，代表内部包含物体（正样本positive）
+        pos = conf_t > 0 #  (8732)  里面好几个数值都是15。其他都是0
         
         #--------------------------------------------------#
         #   求和得到每一个图片内部有多少正样本
         #   num_pos  (num, )
-        #--------------------------------------------------#
         num_pos = pos.sum(dim=1, keepdim=True)
         
         #--------------------------------------------------#
-        #   取出所有的正样本，并计算loss
+        # 计算回归loss  取出所有的正样本，并计算回归loss（只使用正样本）=================================================================================
         #   pos_idx (num, num_priors, 4)
-        #--------------------------------------------------#
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
         loc_p = loc_data[pos_idx].view(-1, 4)
         loc_t = loc_t[pos_idx].view(-1, 4)
-
+        # 计算分类loss（置信度）
         loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
-        #--------------------------------------------------#
+        
+        #  计算分类loss =====================================================================
         #   batch_conf  (num * num_priors, num_classes)
         #   loss_c      (num, num_priors)
-        #--------------------------------------------------#
-        batch_conf = conf_data.view(-1, self.num_classes)
-        # 这个地方是在寻找难分类的先验框
-        loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1))
+        batch_conf = conf_data.view(-1, self.num_classes) # 转换格式
+        # 这个地方是在寻找难分类的先验框==？？？（ 不用于预测的话，不用softmax！！）
+        loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1)) # 训练没有用softmax，而是用这个（ 不用于预测的话，不用softmax！！）
         loss_c = loss_c.view(num, -1)
 
         # 难分类的先验框不把正样本考虑进去，只考虑难分类的负样本
-        loss_c[pos] = 0 
+        loss_c[pos] = 0  #  正样本positive
         #--------------------------------------------------#
         #   loss_idx    (num, num_priors)
         #   idx_rank    (num, num_priors)
-        #--------------------------------------------------#
         _, loss_idx = loss_c.sort(1, descending=True)
         _, idx_rank = loss_idx.sort(1)
         #--------------------------------------------------#
         #   求和得到每一个图片内部有多少正样本
         #   num_pos     (num, )
         #   neg         (num, num_priors)
-        #--------------------------------------------------#
         num_pos = pos.long().sum(1, keepdim=True)
         # 限制负样本数量
         num_neg = torch.clamp(self.negpos_ratio * num_pos, max = pos.size(1) - 1)
@@ -114,16 +105,16 @@ class MultiBoxLoss(nn.Module):
         #   求和得到每一个图片内部有多少正样本
         #   pos_idx   (num, num_priors, num_classes)
         #   neg_idx   (num, num_priors, num_classes)
-        #--------------------------------------------------#
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
-
         # 选取出用于训练的正样本与负样本，计算loss
         conf_p = conf_data[(pos_idx + neg_idx).gt(0)].view(-1, self.num_classes)
         targets_weighted = conf_t[(pos + neg).gt(0)]
         loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
 
+        # 正样本总数（举例565）  num_pos.data.sum()
         N = torch.max(num_pos.data.sum(), torch.ones_like(num_pos.data.sum()))
+        # 相当于归一化
         loss_l /= N
         loss_c /= N
         return loss_l, loss_c

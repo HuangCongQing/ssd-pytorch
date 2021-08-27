@@ -4,6 +4,7 @@ from PIL import Image
 from torch.utils.data.dataset import Dataset
 
 MEANS = (104, 117, 123)
+# 数据处理
 class SSDDataset(Dataset):
     def __init__(self, train_lines, image_size, is_train):
         super(SSDDataset, self).__init__()
@@ -18,7 +19,7 @@ class SSDDataset(Dataset):
 
     def rand(self, a=0, b=1):
         return np.random.rand() * (b - a) + a
-
+    # 数据增强
     def get_random_data(self, annotation_line, input_shape, jitter=.3, hue=.1, sat=1.5, val=1.5, random=True):
         """实时数据增强的随机预处理"""
         line = annotation_line.split()
@@ -133,10 +134,10 @@ class SSDDataset(Dataset):
         y = np.concatenate([boxes, y[:,-1:]],axis=-1)
             
         img = np.array(img, dtype = np.float32)
-        tmp_inp = np.transpose(img - MEANS, (2,0,1))
+        tmp_inp = np.transpose(img - MEANS, (2,0,1)) # 减去均值，维度变换
         tmp_targets = np.array(y, dtype = np.float32)
 
-        return tmp_inp, tmp_targets
+        return tmp_inp, tmp_targets 
 
 
 # DataLoader中collate_fn使用
@@ -144,8 +145,8 @@ def ssd_dataset_collate(batch):
     images = []
     bboxes = []
     for img, box in batch:
-        images.append(img)
-        bboxes.append(box)
+        images.append(img) # 
+        bboxes.append(box) # 保存图片和bboxes
     images = np.array(images)
     return images, bboxes
 
